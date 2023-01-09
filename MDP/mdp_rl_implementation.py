@@ -1,6 +1,27 @@
 from copy import deepcopy
 import random
 import numpy as np
+from typing import List, Tuple, Dict
+
+
+def expectation_calc(p: Tuple[int, int, int, int], curr_i, curr_j, U, mdp):
+    sum = 0
+    curr_state = (curr_i, curr_j)
+    for k, action in enumerate(mdp.actions):
+        next_state = mdp.step(curr_state, action)
+        sum += p[k] * U[next_state[0]][next_state[1]]
+    return sum
+
+
+def max_diff(U_new, U, mdp):
+    diff = np.zeros((mdp.num_row, mdp.num_col))
+    for i in range(mdp.num_row):
+        for j in range(mdp.num_col):
+            if U[i][j] == "WALL":
+                continue
+            diff[i][j] = abs(U_new[i][j] - U[i][j])
+    return np.amax(diff)
+
 
 
 def value_iteration(mdp, U_init, epsilon=10 ** (-3)):
@@ -12,7 +33,20 @@ def value_iteration(mdp, U_init, epsilon=10 ** (-3)):
     #
 
     # ====== YOUR CODE: ======
-    raise NotImplementedError
+    U_new = deepcopy(U_init)
+    while True:
+        delta = 0
+        U = deepcopy(U_new)
+        for i in range(mdp.num_row):
+            for j in range(mdp.num_col):
+                if mdp.board[i][j] == "WALL":
+                    continue
+                U_new[i][j] = float(mdp.board[i][j]) + mdp.gamma * max(
+                    expectation_calc(mdp.transition_function[action], i, j, U,
+                                     mdp) for action in mdp.actions)
+        delta = max(delta, max_diff(U_new, U, mdp))
+        if delta < epsilon * (1 - mdp.gamma) / mdp.gamma:
+            return U
     # ========================
 
 
