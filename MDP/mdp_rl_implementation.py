@@ -77,14 +77,22 @@ def outcome(state, curr_action, mdp):
     weights = [100 * val for val in mdp.transition_function[curr_action]]
     curr_action = random.choices(population=action_lst, weights=weights, k=1)[0]
     new_state = mdp.step(state, curr_action)
-    reward = float(mdp.board[new_state[0]][new_state[1]])
-    done = new_state in mdp.terminal_states
+    reward = float(mdp.board[state[0]][state[1]])
+    done = state in mdp.terminal_states
     return new_state, reward, done
 
 
-
-def q_table_state_format(state: Tuple[int,int], num_row):
-     return state[0] * (num_row + 1) + state[1]
+def state_calc(mdp):
+    in_qtable = lambda state: not (mdp.board[state[0]][state[1]] == 'WALL')
+    state_index_map = {}
+    states_number = 0
+    for i in range(mdp.num_row):
+        for j in range(mdp.num_col):
+            state = (i, j)
+            if in_qtable(state):
+                state_index_map[state] = states_number
+                states_number += 1
+    return state_index_map, states_number
 
 
 def q_learning(mdp, init_state, total_episodes=10000, max_steps=999, learning_rate=0.7, epsilon=1.0,
@@ -103,12 +111,13 @@ def q_learning(mdp, init_state, total_episodes=10000, max_steps=999, learning_ra
     #
 
     # ====== YOUR CODE: ======
-    action_list = [action for action in mdp.actions]
-    action_size = len(action_list)
-    indexing = lambda action: action_list.index(action)
-    state_size = mdp.num_col * mdp.num_row
-    qtable = np.zeros((state_size, action_size))
 
+    state_index_map, states_number = state_calc(mdp)
+    action_list = [action for action in mdp.actions]
+    # action_size = len(action_list)
+    # indexing = lambda action: action_list.index(action)
+    # state_size = mdp.num_col * mdp.num_row
+    qtable = np.zeros((states_number, len(action_list)))
     for episode in range(total_episodes):
         # Reset the environment
         state = init_state
@@ -118,10 +127,11 @@ def q_learning(mdp, init_state, total_episodes=10000, max_steps=999, learning_ra
         for step in range(max_steps):
             # Choose an action (a) in the current world state (s)
 
-            ## First we randomize a number
+            # First we randomize a number
             exp_exp_tradeoff = random.uniform(0, 1)
-            curr_q_index = q_table_state_format(state, mdp.num_row)
-            ## If this number > greater than epsilon --> exploitation (taking the biggest Q value for this state)
+            curr_q_index = state_index_map[state]
+
+            # If this number > greater than epsilon --> exploitation (taking the biggest Q value for this state)
             if exp_exp_tradeoff > epsilon:
                 action = action_list[np.argmax(qtable[curr_q_index, :])]
 
@@ -131,22 +141,26 @@ def q_learning(mdp, init_state, total_episodes=10000, max_steps=999, learning_ra
 
 
             # Take the action (a) and observe the outcome state(s') and reward (r)
-
+            # print(state, action)
             new_state, reward, done = outcome(state, action, mdp)
+            # print(outcome((1, 3), "RIGHT", mdp))
+            # return
 
-            new_q_index = q_table_state_format(new_state, mdp.num_row)
+            new_q_index = state_index_map[new_state]
 
-            action_index = indexing(action)
+            action_index = action_list.index(action)
             # Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]
             qtable[curr_q_index, action_index] = qtable[curr_q_index, action_index] + learning_rate * (reward + mdp.gamma *
                                                                              np.max(qtable[new_q_index, :]) - qtable[
                                                                                  curr_q_index, action_index])
 
+            if state in mdp.terminal_states:
+                qtable[curr_q_index, :].fill(reward)
             # Our new state is state
             state = new_state
 
             # If done : finish episode
-            if done == True:
+            if done:
                 break
 
         # Reduce epsilon (because we need less and less exploration)
@@ -162,13 +176,15 @@ def q_table_policy_extraction(mdp, qtable):
     #
 
     # ====== YOUR CODE: ======
+    state_index_map, states_number = state_calc(mdp)
+
     action_list = [action for action in mdp.actions]
     policy = deepcopy(mdp.board)
     for i in range(mdp.num_row):
         for j in range(mdp.num_col):
             if mdp.board[i][j] == "WALL":
                 continue
-            q_index = q_table_state_format((i, j), mdp.num_row)
+            q_index = state_index_map[(i, j)]
             policy[i][j] = action_list[np.argmax(qtable[q_index, :])]
     return policy
     # ========================
@@ -176,23 +192,26 @@ def q_table_policy_extraction(mdp, qtable):
 
 # BONUS
 
-def p_value_calc(s, policy, mdp):
+def p_value_calc(s, policy, mdp, states_number, state_index_map):
+    if s in mdp.terminal_states:
+        return np.zeros(states_number)
     p_dict = {}
     for i in range(mdp.num_row):
         for j in range(mdp.num_col):
             p_dict[(i, j)] = 0
-    P = np.zeros((mdp.num_row, mdp.num_col))
+    P = np.zeros(states_number)
     step = policy[s[0]][s[1]]
     if step == 0 or step == 'WALL':
-        return P.flatten()
+        return P
     possible_states = [mdp.step(s, action) for action in mdp.actions]
     for k in range(len(mdp.actions)):
         p_dict[possible_states[k]] += float(mdp.transition_function[step][k])
     for i in range(mdp.num_row):
         for j in range(mdp.num_col):
-            P[i][j] = p_dict[(i, j)]
-    return P.flatten()
-
+            if mdp.board[i][j] == 'WALL':
+                continue
+            P[state_index_map[(i, j)]] = p_dict[(i, j)]
+    return P
 
 
 def policy_evaluation(mdp, policy):
@@ -202,21 +221,31 @@ def policy_evaluation(mdp, policy):
     #
 
     # ====== YOUR CODE: ======
-    P = np.zeros(mdp.num_row * mdp.num_col)
-    R = deepcopy(mdp.board)
+    state_index_map, states_number = state_calc(mdp)
+    P = np.zeros((states_number, states_number))
+    R = np.zeros(states_number)
     for i in range(mdp.num_row):
         for j in range(mdp.num_col):
-            P = np.concatenate((P, p_value_calc((i, j), policy, mdp)), axis=0)
             if mdp.board[i][j] == "WALL":
-                R[i][j] = 0
+                continue
             else:
-                # P = np.concatenate((P, p_value_calc((i, j), policy, mdp)), axis=0)
-                R[i][j] = float(mdp.board[i][j])
-    R = np.array(R).flatten()
-    P = P.reshape((mdp.num_row * mdp.num_col + 1, mdp.num_row * mdp.num_col))[1:]
-    I = np.eye(12)
+                state = (i, j)
+                P[state_index_map[state]] = p_value_calc((i, j), policy, mdp, states_number, state_index_map)
+                R[state_index_map[state]] = float(mdp.board[i][j])
+
+    I = np.eye(11)
     U = np.linalg.inv(I - mdp.gamma * P) @ R
-    return U.reshape((mdp.num_row, mdp.num_col))
+    U_reshape = deepcopy(mdp.board)
+    for i in range(mdp.num_row):
+        for j in range(mdp.num_col):
+            if mdp.board[i][j] == "WALL":
+                continue
+            U_reshape[i][j] = U[state_index_map[(i, j)]]
+
+
+    # print(U.reshape((mdp.num_row, mdp.num_col)))
+    # print("AA")
+    return U_reshape
     # ========================
 
 
