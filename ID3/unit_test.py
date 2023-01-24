@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from KNN import KNNClassifier
+# from KNN import KNNClassifier
 from utils import accuracy, l2_dist
 
 
@@ -16,6 +16,7 @@ class Test(unittest.TestCase):
         mat2 = np.array([[0, 0, 0]])  # (N2, D) = (1, 3)
 
         l2_dist_result = l2_dist(mat1, mat2)
+        print(l2_dist_result)
 
         self.assertEqual(l2_dist_result.shape, (2, 1))
         print('Success')

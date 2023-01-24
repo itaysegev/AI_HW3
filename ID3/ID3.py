@@ -1,6 +1,6 @@
 import math
 
-from DecisonTree import Leaf, Question, DecisionNode, class_counts
+from DecisonTree import Leaf, Question, DecisionNode, class_counts, unique_vals
 from utils import *
 
 """
@@ -10,7 +10,7 @@ Make the imports of python packages needed
 
 class ID3:
     def __init__(self, label_names: list, min_for_pruning=0, target_attribute='diagnosis'):
-        self.label_names = label_names
+        self.label_names = label_names  # first col is class (sick/healthy), the rest are feature/column names
         self.target_attribute = target_attribute
         self.tree_root = None
         self.used_features = set()
@@ -32,7 +32,11 @@ class ID3:
         impurity = 0.0
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        tot_examples = np.sum(list(counts.values()))
+        for c in counts.keys():
+            pc = counts[c]/tot_examples
+            impurity += pc * math.log(pc, 2)
+        impurity = -1 * impurity
         # ========================
 
         return impurity
@@ -56,7 +60,10 @@ class ID3:
 
         info_gain_value = 0.0
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        tot_examples = len(left) + len(right)
+        left_elem = (len(left) / tot_examples) * self.entropy(left, left_labels)
+        right_elem = (len(right) / tot_examples) * self.entropy(right, right_labels)
+        info_gain_value = current_uncertainty - (left_elem + right_elem)
         # ========================
 
         return info_gain_value
@@ -79,7 +86,19 @@ class ID3:
         assert len(rows) == len(labels), 'Rows size should be equal to labels size.'
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        true_rows = []
+        true_labels = []
+        false_rows = []
+        false_labels = []
+        for i, row in enumerate(rows):
+            if question.match(row):
+                true_rows.append(row)
+                true_labels.append(labels[i])
+            else:
+                false_rows.append(row)
+                false_labels.append(labels[i])
+
+        gain = self.info_gain(true_rows, true_labels, false_rows, false_labels, current_uncertainty)
         # ========================
 
         return gain, true_rows, true_labels, false_rows, false_labels
@@ -101,7 +120,21 @@ class ID3:
         current_uncertainty = self.entropy(rows, labels)
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        feature_names = np.copy(self.label_names[1:])
+        for i, feature in enumerate(feature_names):
+            # if feature not in self.used_features:
+            values = list(unique_vals(rows, i))
+            values.sort()
+            thresholds = [(0.5 * (values[j] + values[j + 1])) for j in range(len(values) - 1)]
+            for t in thresholds:
+                question = Question(feature, i, t)
+                gain, true_rows, true_labels, false_rows, false_labels = \
+                    self.partition(rows, labels, question, current_uncertainty)
+                if gain >= best_gain:
+                    best_gain = gain
+                    best_true_rows, best_true_labels, best_false_rows, best_false_labels = \
+                        true_rows, true_labels, false_rows, false_labels
+                    best_question = question
         # ========================
 
         return best_gain, best_question, best_true_rows, best_true_labels, best_false_rows, best_false_labels
@@ -123,7 +156,27 @@ class ID3:
         true_branch, false_branch = None, None
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+
+
+        # if all of the labels are the same
+        if self.entropy(rows, labels) == 0:  # OR we can use np.all(labels == labels[0]):
+            return Leaf(rows, labels)
+
+        # Early pruning
+        if len(labels) <= self.min_for_pruning:
+            return Leaf(rows, labels)
+
+        # if all the features have been used
+        # we subtract 1 from label_names because the first is the class (sick/healthy)
+        # if len(self.used_features) == (len(self.label_names)-1):
+        #     return Leaf(rows, labels)
+
+        best_gain, best_question, best_true_rows, best_true_labels, best_false_rows, best_false_labels = \
+            self.find_best_split(rows, labels)
+
+        # self.used_features.add(best_question.column)
+        true_branch = self.build_tree(best_true_rows, best_true_labels)
+        false_branch = self.build_tree(best_false_rows, best_false_labels)
         # ========================
 
         return DecisionNode(best_question, true_branch, false_branch)
@@ -137,7 +190,7 @@ class ID3:
         # TODO: Build the tree that fits the input data and save the root to self.tree_root
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        self.tree_root = self.build_tree(x_train, y_train)
         # ========================
 
     def predict_sample(self, row, node: DecisionNode or Leaf = None):
@@ -155,7 +208,16 @@ class ID3:
         prediction = None
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        if type(node) is Leaf:
+            # the leaf node can have examples with any classification
+            # the classification of the leaf is determined by the majority
+            # returns the label that appears the most out of the training examples from this node
+            prediction = max(node.predictions, key=lambda x: node.predictions[x])
+        else:  # node is of type DecisionNode
+            if node.question.match(row):
+                prediction = self.predict_sample(row, node.true_branch)
+            else:
+                prediction = self.predict_sample(row, node.false_branch)
         # ========================
 
         return prediction
@@ -172,7 +234,11 @@ class ID3:
         y_pred = None
 
         # ====== YOUR CODE: ======
-        raise NotImplementedError
+        pred = []
+        for row in rows:
+            pred.append(self.predict_sample(row))
+
+        y_pred = np.array(pred)
         # ========================
 
         return y_pred

@@ -29,7 +29,10 @@ def basic_experiment(x_train, y_train, x_test, y_test, formatted_print=False):
     acc = None
 
     # ====== YOUR CODE: ======
-    raise NotImplementedError
+    tree_instance = ID3(attributes_names)
+    tree_instance.fit(x_train, y_train)
+    y_pred = tree_instance.predict(x_test)
+    acc = accuracy(y_test, y_pred)
     # ========================
 
     assert acc > 0.9, 'you should get an accuracy of at least 90% for the full ID3 decision tree'
@@ -53,10 +56,36 @@ def best_m_test(x_train, y_train, x_test, y_test, min_for_pruning):
     acc = None
 
     # ====== YOUR CODE: ======
-    raise NotImplementedError
+    tree_instance = ID3(attributes_names, min_for_pruning=50)
+    tree_instance.fit(x_train, y_train)
+    y_pred = tree_instance.predict(x_test)
+    acc = accuracy(y_test, y_pred)
     # ========================
 
     return acc
+
+
+def cross_validation_experiment(x, y, plot_graph=True):
+    m_lst = [0, 30, 50, 80, 100, 120, 200]
+    kf = KFold(n_splits=5, random_state=318866068, shuffle=True)
+    avg_lst = []
+    for m in m_lst:
+        acc_lst = []
+        for (train_index, test_index) in kf.split(x, y):
+            tree_instance = ID3(attributes_names, min_for_pruning=m)
+            tree_instance.fit(x[train_index], y[train_index])
+            y_pred = tree_instance.predict(x[test_index])
+            acc = accuracy(y[test_index], y_pred)
+            acc_lst.append(acc)
+        print(acc_lst)
+        avg_lst.append(sum(acc_lst) / len(acc_lst))
+    print(np.array(avg_lst))
+    best_m = m_lst[np.array(avg_lst).argmax()]
+    util_plot_graph(m_lst, avg_lst, "M value", "Mean Accuracy", num_folds=len(m_lst))
+    return best_m
+
+
+
 
 
 # ========================================================================
@@ -72,20 +101,20 @@ if __name__ == '__main__':
     formatted_print = True
     basic_experiment(*data_split, formatted_print)
 
-    """
-       cross validation experiment
-       (*) To run the cross validation experiment over the  M pruning hyper-parameter 
-           uncomment below code and run it
-           modify the value from False to True to plot the experiment result
-    """
-    plot_graphs = True
-    best_m = cross_validation_experiment(plot_graph=plot_graphs)
-    print(f'best_m = {best_m}')
+    # """
+    #    cross validation experiment
+    #    (*) To run the cross validation experiment over the  M pruning hyper-parameter
+    #        uncomment below code and run it
+    #        modify the value from False to True to plot the experiment result
 
-    """
-        pruning experiment, run with the best parameter
-        (*) To run the experiment uncomment below code and run it
-    """
+    # plot_graphs = True
+    # best_m = cross_validation_experiment(data_split[0], data_split[1], plot_graph=plot_graphs)
+    # print(f'best_m = {best_m}')
+
+
+    #     pruning experiment, run with the best parameter
+    #     (*) To run the experiment uncomment below code and run it
+    best_m = 50
     acc = best_m_test(*data_split, min_for_pruning=best_m)
     assert acc > 0.95, 'you should get an accuracy of at least 95% for the pruned ID3 decision tree'
     print(f'Test Accuracy: {acc * 100:.2f}%' if formatted_print else acc)
